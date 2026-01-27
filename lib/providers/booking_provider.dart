@@ -5,20 +5,37 @@ import 'dart:convert';
 import '../models/schedule.dart';
 import '../models/booking.dart';
 import '../models/user.dart';
+import '../services/firebase_service.dart';
 
 class BookingProvider extends ChangeNotifier {
   List<Schedule> _schedules = [];
   List<Booking> _bookings = [];
   bool _isLoading = false;
   String? _errorMessage;
+  bool _useFirebase = false;
 
   List<Schedule> get schedules => _schedules;
   List<Booking> get bookings => _bookings;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  bool get useFirebase => _useFirebase;
 
   BookingProvider() {
     loadData();
+    _initializeFirebase();
+  }
+
+  void _initializeFirebase() async {
+    try {
+      // Test Firebase connection
+      await FirebaseService.getAllSchedules();
+      _useFirebase = true;
+      notifyListeners();
+    } catch (e) {
+      print('Firebase connection failed, using local storage: $e');
+      _useFirebase = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadData() async {
@@ -26,28 +43,51 @@ class BookingProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      final schedulesJson = prefs.getStringList('schedules') ?? [];
-      _schedules = schedulesJson
-          .map((json) => Schedule.fromJson(jsonDecode(json)))
-          .toList();
+      if (_useFirebase) {
+        // Load from Firebase
+        _schedules = await FirebaseService.getAllSchedules();
+        _bookings = await FirebaseService.getAllBookings();
+        
+        // Set up real-time listeners
+        _setupFirebaseListeners();
+      } else {
+        // Load from local storage
+        final prefs = await SharedPreferences.getInstance();
+        
+        final schedulesJson = prefs.getStringList('schedules') ?? [];
+        _schedules = schedulesJson
+            .map((json) => Schedule.fromJson(jsonDecode(json)))
+            .toList();
 
-      if (_schedules.isEmpty) {
-        _schedules = _generateSampleSchedules();
-        await _saveSchedules();
+        if (_schedules.isEmpty) {
+          _schedules = _generateSampleSchedules();
+          await _saveSchedules();
+        }
+
+        final bookingsJson = prefs.getStringList('bookings') ?? [];
+        _bookings = bookingsJson
+            .map((json) => Booking.fromJson(jsonDecode(json)))
+            .toList();
       }
-
-      final bookingsJson = prefs.getStringList('bookings') ?? [];
-      _bookings = bookingsJson
-          .map((json) => Booking.fromJson(jsonDecode(json)))
-          .toList();
     } catch (e) {
       _errorMessage = 'Failed to load data';
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _setupFirebaseListeners() {
+    // Listen to real-time updates from Firebase
+    FirebaseService.getSchedulesStream().listen((schedules) {
+      _schedules = schedules;
+      notifyListeners();
+    });
+
+    FirebaseService.getBookingsStream().listen((bookings) {
+      _bookings = bookings;
+      notifyListeners();
+    });
   }
 
   List<Schedule> _generateSampleSchedules() {
@@ -126,8 +166,12 @@ class BookingProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _schedules.add(schedule);
-      await _saveSchedules();
+      if (_useFirebase) {
+        await FirebaseService.saveSchedule(schedule);
+      } else {
+        _schedules.add(schedule);
+        await _saveSchedules();
+      }
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -143,10 +187,14 @@ class BookingProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final index = _schedules.indexWhere((s) => s.id == schedule.id);
-      if (index != -1) {
-        _schedules[index] = schedule;
-        await _saveSchedules();
+      if (_useFirebase) {
+        await FirebaseService.updateSchedule(schedule);
+      } else {
+        final index = _schedules.indexWhere((s) => s.id == schedule.id);
+        if (index != -1) {
+          _schedules[index] = schedule;
+          await _saveSchedules();
+        }
       }
       _isLoading = false;
       notifyListeners();
@@ -163,10 +211,14 @@ class BookingProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _schedules.removeWhere((s) => s.id == scheduleId);
-      _bookings.removeWhere((b) => b.scheduleId == scheduleId);
-      await _saveSchedules();
-      await _saveBookings();
+      if (_useFirebase) {
+        await FirebaseService.deleteSchedule(scheduleId);
+      } else {
+        _schedules.removeWhere((s) => s.id == scheduleId);
+        _bookings.removeWhere((b) => b.scheduleId == scheduleId);
+        await _saveSchedules();
+        await _saveBookings();
+      }
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -209,17 +261,27 @@ class BookingProvider extends ChangeNotifier {
         notes: notes,
       );
 
-      _bookings.add(booking);
-
-      final scheduleIndex = _schedules.indexWhere((s) => s.id == scheduleId);
-      if (scheduleIndex != -1) {
-        _schedules[scheduleIndex] = _schedules[scheduleIndex].copyWith(
-          currentParticipants: _schedules[scheduleIndex].currentParticipants + 1,
+      if (_useFirebase) {
+        await FirebaseService.saveBooking(booking);
+        // Update schedule participants count
+        Schedule updatedSchedule = schedule.copyWith(
+          currentParticipants: schedule.currentParticipants + 1,
         );
+        await FirebaseService.updateSchedule(updatedSchedule);
+      } else {
+        _bookings.add(booking);
+
+        final scheduleIndex = _schedules.indexWhere((s) => s.id == scheduleId);
+        if (scheduleIndex != -1) {
+          _schedules[scheduleIndex] = _schedules[scheduleIndex].copyWith(
+            currentParticipants: _schedules[scheduleIndex].currentParticipants + 1,
+          );
+        }
+
+        await _saveBookings();
+        await _saveSchedules();
       }
 
-      await _saveBookings();
-      await _saveSchedules();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -239,17 +301,28 @@ class BookingProvider extends ChangeNotifier {
     try {
       final booking = _bookings.firstWhere((b) => b.id == bookingId);
       
-      _bookings.removeWhere((b) => b.id == bookingId);
-
-      final scheduleIndex = _schedules.indexWhere((s) => s.id == booking.scheduleId);
-      if (scheduleIndex != -1) {
-        _schedules[scheduleIndex] = _schedules[scheduleIndex].copyWith(
-          currentParticipants: _schedules[scheduleIndex].currentParticipants - 1,
+      if (_useFirebase) {
+        await FirebaseService.deleteBooking(bookingId);
+        // Update schedule participants count
+        final schedule = _schedules.firstWhere((s) => s.id == booking.scheduleId);
+        Schedule updatedSchedule = schedule.copyWith(
+          currentParticipants: schedule.currentParticipants - 1,
         );
+        await FirebaseService.updateSchedule(updatedSchedule);
+      } else {
+        _bookings.removeWhere((b) => b.id == bookingId);
+
+        final scheduleIndex = _schedules.indexWhere((s) => s.id == booking.scheduleId);
+        if (scheduleIndex != -1) {
+          _schedules[scheduleIndex] = _schedules[scheduleIndex].copyWith(
+            currentParticipants: _schedules[scheduleIndex].currentParticipants - 1,
+          );
+        }
+
+        await _saveBookings();
+        await _saveSchedules();
       }
 
-      await _saveBookings();
-      await _saveSchedules();
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -260,7 +333,12 @@ class BookingProvider extends ChangeNotifier {
   }
 
   List<Booking> getUserBookings(String userId) {
-    return _bookings.where((b) => b.userId == userId).toList();
+    if (_useFirebase) {
+      // For Firebase, we'll use the cached data or fetch fresh data
+      return _bookings.where((b) => b.userId == userId).toList();
+    } else {
+      return _bookings.where((b) => b.userId == userId).toList();
+    }
   }
 
   List<Booking> getScheduleBookings(String scheduleId) {

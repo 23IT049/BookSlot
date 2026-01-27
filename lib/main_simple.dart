@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/admin_dashboard.dart';
@@ -9,15 +7,7 @@ import 'providers/auth_provider.dart';
 import 'providers/booking_provider.dart';
 import 'models/user.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    print('Firebase initialization failed, using local storage: $e');
-  }
+void main() {
   runApp(const BookSlotApp());
 }
 
@@ -57,11 +47,13 @@ class AuthWrapper extends StatelessWidget {
       builder: (context, authProvider, child) {
         if (authProvider.isLoading) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
           );
         }
 
-        if (authProvider.currentUser != null) {
+        if (authProvider.isAuthenticated) {
           if (authProvider.currentUser!.isAdmin) {
             return const AdminDashboard();
           } else {
