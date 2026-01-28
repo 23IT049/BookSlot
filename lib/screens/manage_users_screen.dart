@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../models/user.dart';
+import '../models/booking.dart';
+import '../models/schedule.dart';
+import '../services/firebase_service.dart';
+import '../providers/booking_provider.dart';
 
 class ManageUsersScreen extends StatefulWidget {
   const ManageUsersScreen({super.key});
@@ -8,35 +15,74 @@ class ManageUsersScreen extends StatefulWidget {
 }
 
 class _ManageUsersScreenState extends State<ManageUsersScreen> {
-  final List<Map<String, dynamic>> _users = [
-    {
-      'id': 'user_1',
-      'name': 'Test User',
-      'email': 'user@bookslot.com',
-      'phone': '+1234567890',
-      'role': 'User',
-      'joinDate': DateTime.now().subtract(const Duration(days: 30)),
-      'status': 'Active',
-    },
-    {
-      'id': 'user_2',
-      'name': 'Jane Smith',
-      'email': 'jane@example.com',
-      'phone': '+0987654321',
-      'role': 'User',
-      'joinDate': DateTime.now().subtract(const Duration(days: 15)),
-      'status': 'Active',
-    },
-    {
-      'id': 'user_3',
-      'name': 'John Doe',
-      'email': 'john@example.com',
-      'phone': '+1122334455',
-      'role': 'User',
-      'joinDate': DateTime.now().subtract(const Duration(days: 7)),
-      'status': 'Active',
-    },
-  ];
+  List<User> _users = [];
+  List<Booking> _bookings = [];
+  List<Schedule> _schedules = [];
+  bool _isLoading = true;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final users = await FirebaseService.getAllUsers();
+      final bookingProvider = Provider.of<BookingProvider>(context, listen: false);
+      
+      setState(() {
+        _users = users;
+        _bookings = bookingProvider.bookings;
+        _schedules = bookingProvider.schedules;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading data: $e')),
+        );
+      }
+    }
+  }
+
+  List<User> get _filteredUsers {
+    if (_searchQuery.isEmpty) return _users;
+    return _users.where((user) =>
+      user.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().contains(_searchQuery.toLowerCase())
+    ).toList();
+  }
+
+  List<Booking> _getUserBookings(String userId) {
+    return _bookings.where((booking) => booking.userId == userId).toList();
+  }
+
+  String _getScheduleTitle(String scheduleId) {
+    final schedule = _schedules.firstWhere(
+      (s) => s.id == scheduleId,
+      orElse: () => Schedule(
+        id: scheduleId,
+        title: 'Unknown Schedule',
+        description: '',
+        date: DateTime.now(),
+        startTime: const TimeOfDay(hour: 0, minute: 0),
+        endTime: const TimeOfDay(hour: 0, minute: 0),
+        maxParticipants: 0,
+        location: '',
+        createdBy: '',
+      ),
+    );
+    return schedule.title;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +103,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                       ),
                     ),
                     onChanged: (value) {
-                      // TODO: Implement search functionality
+                      setState(() {
+                        _searchQuery = value;
+                      });
                     },
                   ),
                 ),
@@ -71,341 +119,341 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
               ],
             ),
           ),
-          Expanded(
-            child: _users.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.people, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text(
-                          'No users found',
-                          style: TextStyle(fontSize: 18, color: Colors.grey),
-                        ),
-                        SizedBox(height: 8),
-                        Text('Add users to get started'),
-                      ],
+          if (_isLoading)
+            const Expanded(
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else
+            Expanded(
+              child: _filteredUsers.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.people, size: 64, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text(
+                            'No users found',
+                            style: TextStyle(fontSize: 18, color: Colors.grey),
+                          ),
+                          SizedBox(height: 8),
+                          Text('Add users to get started'),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _filteredUsers.length,
+                      itemBuilder: (context, index) {
+                        final user = _filteredUsers[index];
+                        final userBookings = _getUserBookings(user.id);
+                        
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      backgroundColor: user.isAdmin ? Colors.red : Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                                      child: Text(
+                                        user.name.isNotEmpty 
+                                            ? user.name.substring(0, 2).toUpperCase()
+                                            : 'U',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                user.name,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              if (user.isAdmin)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.red,
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                  child: const Text(
+                                                    'ADMIN',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          Text(
+                                            user.email,
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          if (user.phone != null && user.phone!.isNotEmpty)
+                                            Text(
+                                              user.phone!,
+                                              style: TextStyle(
+                                                color: Colors.grey[600],
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    PopupMenuButton<String>(
+                                      onSelected: (value) {
+                                        switch (value) {
+                                          case 'view_bookings':
+                                            _showUserBookingsDialog(user);
+                                            break;
+                                          case 'edit':
+                                            _showEditUserDialog(user);
+                                            break;
+                                          case 'delete':
+                                            _showDeleteUserDialog(user);
+                                            break;
+                                        }
+                                      },
+                                      itemBuilder: (context) => [
+                                        const PopupMenuItem(
+                                          value: 'view_bookings',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.book),
+                                              SizedBox(width: 8),
+                                              Text('View Bookings'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'edit',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.edit),
+                                              SizedBox(width: 8),
+                                              Text('Edit User'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.delete, color: Colors.red),
+                                              SizedBox(width: 8),
+                                              Text('Delete User', style: TextStyle(color: Colors.red)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.book, size: 16, color: Colors.grey[600]),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '${userBookings.length} Booking${userBookings.length != 1 ? 's' : ''}',
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      TextButton(
+                                        onPressed: () => _showUserBookingsDialog(user),
+                                        child: const Text('View All'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (user.createdAt != null) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Joined: ${DateFormat('MMM dd, yyyy').format(user.createdAt!)}',
+                                    style: TextStyle(
+                                      color: Colors.grey[500],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _users.length,
-                    itemBuilder: (context, index) {
-                      final user = _users[index];
-                      return _buildUserCard(user);
-                    },
-                  ),
+            ),
+        ],
+      ),
+    );
+  }
+  void _showUserBookingsDialog(User user) {
+    final userBookings = _getUserBookings(user.id);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${user.name}\'s Bookings'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: userBookings.isEmpty
+              ? const Text('No bookings found for this user')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: userBookings.length,
+                  itemBuilder: (context, index) {
+                    final booking = userBookings[index];
+                    final scheduleTitle = _getScheduleTitle(booking.scheduleId);
+                    
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              scheduleTitle,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Booked: ${DateFormat('MMM dd, yyyy HH:mm').format(booking.bookingTime)}',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (booking.notes != null && booking.notes!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.note, size: 16, color: Colors.blue[600]),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        'Note: ${booking.notes}',
+                                        style: TextStyle(
+                                          color: Colors.blue[600],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: booking.status == 'confirmed' ? Colors.green : Colors.orange,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    booking.status.toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildUserCard(Map<String, dynamic> user) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Theme.of(context).primaryColor,
-                  child: Text(
-                    user['name'].toString().substring(0, 2).toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user['name'],
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        user['email'],
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'edit') {
-                      _showEditUserDialog(user);
-                    } else if (value == 'delete') {
-                      _showDeleteUserDialog(user);
-                    } else if (value == 'deactivate') {
-                      _showDeactivateUserDialog(user);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit),
-                          SizedBox(width: 8),
-                          Text('Edit'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'deactivate',
-                      child: Row(
-                        children: [
-                          Icon(Icons.block),
-                          SizedBox(width: 8),
-                          Text('Deactivate'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete),
-                          SizedBox(width: 8),
-                          Text('Delete'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.phone, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  user['phone'] ?? 'Not provided',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                const SizedBox(width: 16),
-                Icon(Icons.person, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  user['role'],
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: user['status'] == 'Active' ? Colors.green : Colors.red,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    user['status'],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  'Joined: ${user['joinDate'].toString().substring(0, 10)}',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+  void _showEditUserDialog(User user) {
+    // TODO: Implement edit user dialog
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Edit user functionality coming soon')),
+    );
+  }
+
+  void _showDeleteUserDialog(User user) {
+    // TODO: Implement delete user dialog
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Delete user functionality coming soon')),
     );
   }
 
   void _showAddUserDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New User'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              decoration: InputDecoration(
-                labelText: 'Full Name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            SizedBox(height: 16),
-            TextField(
-              decoration: InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            SizedBox(height: 16),
-            TextField(
-              decoration: InputDecoration(
-                labelText: 'Phone',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('User added successfully'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Add User'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditUserDialog(Map<String, dynamic> user) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Edit ${user['name']}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Full Name',
-                border: OutlineInputBorder(),
-              ),
-              controller: TextEditingController(text: user['name']),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
-              controller: TextEditingController(text: user['email']),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Phone',
-                border: OutlineInputBorder(),
-              ),
-              controller: TextEditingController(text: user['phone']),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('User updated successfully'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Update'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteUserDialog(Map<String, dynamic> user) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete User'),
-        content: Text('Are you sure you want to delete ${user['name']}? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('User deleted successfully'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeactivateUserDialog(Map<String, dynamic> user) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Deactivate User'),
-        content: Text('Are you sure you want to deactivate ${user['name']}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('User deactivated successfully'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Deactivate'),
-          ),
-        ],
-      ),
+    // TODO: Implement add user dialog
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Add user functionality coming soon')),
     );
   }
 }

@@ -9,33 +9,17 @@ class AuthProvider extends ChangeNotifier {
   User? _currentUser;
   bool _isLoading = false;
   String? _errorMessage;
-  bool _useFirebase = false; // Toggle between local and Firebase
 
   User? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _currentUser != null;
-  bool get useFirebase => _useFirebase;
 
   AuthProvider() {
-    _loadUserFromPrefs();
-    _initializeFirebase();
+    loadUserFromPrefs();
   }
 
-  void _initializeFirebase() async {
-    try {
-      // Test Firebase connection (Firestore only) - try to get schedules instead
-      await FirebaseService.getAllSchedules();
-      _useFirebase = true;
-      notifyListeners();
-    } catch (e) {
-      print('Firebase initialization failed, using local storage: $e');
-      _useFirebase = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> _loadUserFromPrefs() async {
+  Future<void> loadUserFromPrefs() async {
     _isLoading = true;
     notifyListeners();
 
@@ -69,41 +53,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      User? user;
-      
-      if (_useFirebase) {
-        // Try Firebase login
-        try {
-          user = await SimpleAuthService.signInWithEmailAndPassword(email, password);
-        } catch (e) {
-          // Fallback to demo login
-          user = await SimpleAuthService.demoLogin(email, password);
-        }
-      } else {
-        // Local demo login
-        if (email == 'admin@bookslot.com' && password == 'admin123') {
-          user = User(
-            id: 'admin_1',
-            name: 'Admin User',
-            email: email,
-            password: password,
-            isAdmin: true,
-          );
-        } else if (email == 'user@bookslot.com' && password == 'user123') {
-          user = User(
-            id: 'user_1',
-            name: 'Test User',
-            email: email,
-            password: password,
-            isAdmin: false,
-          );
-        } else {
-          _errorMessage = 'Invalid email or password';
-          _isLoading = false;
-          notifyListeners();
-          return false;
-        }
-      }
+      User? user = await SimpleAuthService.signInWithEmailAndPassword(email, password);
 
       if (user != null) {
         _currentUser = user;
@@ -133,35 +83,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      User? user;
-      
-      if (_useFirebase) {
-        try {
-          user = await SimpleAuthService.signUpWithEmailAndPassword(email, password, name, phone: phone);
-        } catch (e) {
-          _errorMessage = e.toString();
-          _isLoading = false;
-          notifyListeners();
-          return false;
-        }
-      } else {
-        // Local registration
-        if (email == 'admin@bookslot.com') {
-          _errorMessage = 'This email is already registered';
-          _isLoading = false;
-          notifyListeners();
-          return false;
-        }
-
-        user = User(
-          id: 'user_${DateTime.now().millisecondsSinceEpoch}',
-          name: name,
-          email: email,
-          password: password,
-          phone: phone,
-          isAdmin: false,
-        );
-      }
+      User? user = await SimpleAuthService.signUpWithEmailAndPassword(email, password, name, phone: phone);
 
       if (user != null) {
         _currentUser = user;
@@ -186,9 +108,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      if (_useFirebase) {
-        await SimpleAuthService.signOut();
-      }
+      await SimpleAuthService.signOut();
       
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('currentUser');
@@ -210,10 +130,8 @@ class AuthProvider extends ChangeNotifier {
       if (_currentUser != null) {
         User updatedUser = _currentUser!.copyWith(name: name, phone: phone);
         
-        if (_useFirebase) {
-          await SimpleAuthService.updateProfile(name, phone: phone);
-          await FirebaseService.updateUser(updatedUser);
-        }
+        await SimpleAuthService.updateProfile(name, phone: phone);
+        await FirebaseService.updateUser(updatedUser);
         
         _currentUser = updatedUser;
         SimpleAuthService.setCurrentUser(updatedUser);

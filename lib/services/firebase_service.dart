@@ -173,91 +173,33 @@ class FirebaseService {
   }
 
   // Utility Operations
-  static Future<void> initializeSampleData() async {
+  static Future<List<User>> getAllUsers() async {
     try {
-      // Check if data already exists
-      QuerySnapshot schedules = await _schedulesCollection.limit(1).get();
-      if (schedules.docs.isEmpty) {
-        // Add sample schedules
-        List<Schedule> sampleSchedules = [
-          Schedule(
-            id: 'schedule_1',
-            title: 'Morning Yoga Session',
-            description: 'Start your day with refreshing yoga exercises',
-            date: DateTime.now().add(const Duration(days: 1)),
-            startTime: const TimeOfDay(hour: 7, minute: 0),
-            endTime: const TimeOfDay(hour: 8, minute: 0),
-            maxParticipants: 20,
-            location: 'Fitness Center',
-            createdBy: 'admin_1',
-          ),
-          Schedule(
-            id: 'schedule_2',
-            title: 'Team Meeting',
-            description: 'Weekly team sync and project updates',
-            date: DateTime.now().add(const Duration(days: 1)),
-            startTime: const TimeOfDay(hour: 10, minute: 0),
-            endTime: const TimeOfDay(hour: 11, minute: 30),
-            maxParticipants: 15,
-            location: 'Conference Room A',
-            createdBy: 'admin_1',
-          ),
-          Schedule(
-            id: 'schedule_3',
-            title: 'Workshop: Flutter Development',
-            description: 'Learn the basics of Flutter app development',
-            date: DateTime.now().add(const Duration(days: 2)),
-            startTime: const TimeOfDay(hour: 14, minute: 0),
-            endTime: const TimeOfDay(hour: 16, minute: 0),
-            maxParticipants: 30,
-            location: 'Tech Lab',
-            createdBy: 'admin_1',
-          ),
-          Schedule(
-            id: 'schedule_4',
-            title: 'Evening Meditation',
-            description: 'Relax and unwind with guided meditation',
-            date: DateTime.now().add(const Duration(days: 2)),
-            startTime: const TimeOfDay(hour: 18, minute: 0),
-            endTime: const TimeOfDay(hour: 19, minute: 0),
-            maxParticipants: 25,
-            location: 'Wellness Room',
-            createdBy: 'admin_1',
-          ),
-        ];
-
-        for (var schedule in sampleSchedules) {
-          await saveSchedule(schedule);
-        }
-      }
-
-      // Check if admin user exists
-      DocumentSnapshot adminDoc = await _usersCollection.doc('admin_1').get();
-      if (!adminDoc.exists) {
-        User admin = User(
-          id: 'admin_1',
-          name: 'Admin User',
-          email: 'admin@bookslot.com',
-          password: 'admin123', // In production, use proper authentication
-          isAdmin: true,
-        );
-        await saveUser(admin);
-      }
-
-      // Check if sample user exists
-      DocumentSnapshot userDoc = await _usersCollection.doc('user_1').get();
-      if (!userDoc.exists) {
-        User sampleUser = User(
-          id: 'user_1',
-          name: 'Test User',
-          email: 'user@bookslot.com',
-          password: 'user123', // In production, use proper authentication
-          isAdmin: false,
-        );
-        await saveUser(sampleUser);
-      }
+      QuerySnapshot query = await _usersCollection.get();
+      return query.docs.map((doc) => User.fromJson(doc.data() as Map<String, dynamic>)).toList();
     } catch (e) {
-      throw Exception('Failed to initialize sample data: $e');
+      throw Exception('Failed to get all users: $e');
+    }
+  }
+
+  static Future<void> createAdminUser(String email, String password, String name) async {
+    try {
+      // Check if admin user already exists
+      User? existingAdmin = await getUserByEmail(email);
+      if (existingAdmin != null) {
+        throw Exception('Admin user already exists');
+      }
+
+      User admin = User(
+        id: 'admin_${DateTime.now().millisecondsSinceEpoch}',
+        name: name,
+        email: email,
+        password: password, // In production, use proper authentication
+        isAdmin: true,
+      );
+      await saveUser(admin);
+    } catch (e) {
+      throw Exception('Failed to create admin user: $e');
     }
   }
 }

@@ -50,52 +50,6 @@ class SimpleAuthService {
     }
   }
 
-  // Demo login for testing
-  static Future<User?> demoLogin(String email, String password) async {
-    try {
-      if (email == 'admin@bookslot.com' && password == 'admin123') {
-        User admin = User(
-          id: 'admin_1',
-          name: 'Admin User',
-          email: email,
-          password: password,
-          isAdmin: true,
-        );
-        
-        // Save admin to Firestore if not exists
-        User? existingAdmin = await FirebaseService.getUserByEmail(email);
-        if (existingAdmin == null) {
-          await FirebaseService.saveUser(admin);
-        }
-        
-        _currentUser = admin;
-        return admin;
-      } else if (email == 'user@bookslot.com' && password == 'user123') {
-        User user = User(
-          id: 'user_1',
-          name: 'Test User',
-          email: email,
-          password: password,
-          isAdmin: false,
-        );
-        
-        // Save user to Firestore if not exists
-        User? existingUser = await FirebaseService.getUserByEmail(email);
-        if (existingUser == null) {
-          await FirebaseService.saveUser(user);
-        }
-        
-        _currentUser = user;
-        return user;
-      }
-      
-      // Try regular login
-      return await signInWithEmailAndPassword(email, password);
-    } catch (e) {
-      throw Exception('Demo login failed: $e');
-    }
-  }
-
   // Sign out
   static Future<void> signOut() async {
     _currentUser = null;

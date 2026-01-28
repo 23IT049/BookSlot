@@ -4,7 +4,9 @@ import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../providers/booking_provider.dart';
 import '../models/schedule.dart';
+import '../models/booking.dart';
 import '../models/user.dart';
+import '../services/firebase_service.dart';
 import 'add_edit_schedule_screen.dart';
 import 'manage_users_screen.dart';
 import 'profile_screen.dart';
@@ -500,13 +502,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  void _showBookingsDialog(BuildContext context, Schedule schedule, List bookings) {
+  void _showBookingsDialog(BuildContext context, Schedule schedule, List bookings) async {
+    // Fetch all users to get user details
+    List<User> users;
+    try {
+      users = await FirebaseService.getAllUsers();
+    } catch (e) {
+      users = [];
+    }
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Bookings for ${schedule.title}'),
         content: SizedBox(
           width: double.maxFinite,
+          height: 400,
           child: bookings.isEmpty
               ? const Text('No bookings yet')
               : ListView.builder(
@@ -514,27 +527,132 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   itemCount: bookings.length,
                   itemBuilder: (context, index) {
                     final booking = bookings[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        child: Text(booking.userId.substring(0, 2).toUpperCase()),
+                    final user = users.firstWhere(
+                      (u) => u.id == booking.userId,
+                      orElse: () => User(
+                        id: booking.userId,
+                        name: 'Unknown User',
+                        email: 'unknown@example.com',
+                        password: '',
+                        isAdmin: false,
                       ),
-                      title: Text('User ID: ${booking.userId}'),
-                      subtitle: Text(
-                        'Booked: ${DateFormat('MMM dd, yyyy HH:mm').format(booking.bookingTime)}',
-                      ),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: booking.status == 'confirmed' ? Colors.green : Colors.orange,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          booking.status.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
+                    );
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                                  child: Text(
+                                    user.name.isNotEmpty 
+                                        ? user.name.substring(0, 2).toUpperCase()
+                                        : 'U',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        user.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      Text(
+                                        user.email,
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      if (user.phone != null && user.phone!.isNotEmpty)
+                                        Text(
+                                          user.phone!,
+                                          style: TextStyle(
+                                            color: Colors.grey[600],
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: booking.status == 'confirmed' ? Colors.green : Colors.orange,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    booking.status.toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Booked: ${DateFormat('MMM dd, yyyy HH:mm').format(booking.bookingTime)}',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (booking.notes != null && booking.notes!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.note, size: 16, color: Colors.blue[600]),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        'Note: ${booking.notes}',
+                                        style: TextStyle(
+                                          color: Colors.blue[600],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     );
