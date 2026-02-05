@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "302917945269",
+    "project_id": "bookslot-1056e",
+    "storage_bucket": "bookslot-1056e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:302917945269:android:5d6dfd3dc570e914423bfc",
+        "android_client_info": {
+          "package_name": "com.example.bookslot"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAKbH4A6t3WCXbIs0tLQyA767PqSlfFtvQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

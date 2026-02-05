@@ -49,13 +49,13 @@ class DefaultFirebaseOptions {
     storageBucket: 'bookslot-1056e.firebasestorage.app',
   );
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'your-android-api-key',
-    appId: 'your-android-app-id',
-    messagingSenderId: 'your-sender-id',
-    projectId: 'your-project-id',
-    storageBucket: 'your-project-id.appspot.com',
-  );
+    static const FirebaseOptions android = FirebaseOptions(
+      apiKey: 'AIzaSyAKbH4A6t3WCXbIs0tLQyA767PqSlfFtvQ',
+      appId: '1:302917945269:android:5d6dfd3dc570e914423bfc',
+      messagingSenderId: '302917945269',
+      projectId: 'bookslot-1056e',
+      storageBucket: 'bookslot-1056e.firebasestorage.app',
+    );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'your-ios-api-key',
